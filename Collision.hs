@@ -1,4 +1,4 @@
-module Collision 
+module Collision
 (
     SpriteClass(..),
     detectCollision
@@ -8,7 +8,8 @@ import Sprite
 import Graphics.Gloss
 import GameConstants
 
-twoCollided :: (SpriteClass a, Eq a) => a -> a -> Bool
+-- determine if two objects have collided based on their coordinates
+twoCollided :: (SpriteClass a) => a -> a -> Bool
 twoCollided a b =
     (abs $ aX - bX) * 2 < (aWidth + bWidth) &&
     (abs $ aY - bY) * 2 < (aHeight + bHeight)
@@ -16,22 +17,25 @@ twoCollided a b =
         ((aHeight, aWidth), (aX, aY)) = spaceCoords a
         ((bHeight, bWidth), (bX, bY)) = spaceCoords b
 
-detectCollision :: (SpriteClass a,  Eq a) => [a] -> [a]
+-- map over sprites to see if any have collided
+detectCollision :: (SpriteClass a) => [a] -> [a]
 detectCollision [] = []
 detectCollision sprites = map (\x -> updateOrNot sprites x) sprites
 
-updateOrNot :: (SpriteClass a, Eq a) => [a] -> a -> a
-updateOrNot sprites x =  case anyCollided sprites x of 
+-- determine if a sprite has collided with any other and update its state
+updateOrNot :: (SpriteClass a) => [a] -> a -> a
+updateOrNot sprites x =  case anyCollided sprites x of
         True -> updateState x Exploding
         otherwise -> x
 
-anyCollided :: (SpriteClass a, Eq a) => [a] -> a -> Bool
+-- recursively check if objects have collided if they are not the same
+anyCollided :: (SpriteClass a) => [a] -> a -> Bool
 anyCollided [] _ = False
-anyCollided (x:xs) el = 
-    if x == el then 
-        anyCollided xs el 
-    else 
-        case twoCollided x el of 
+anyCollided (x:xs) el = do
+    if ignoreCollide x el then 
+        anyCollided xs el
+    else
+        case twoCollided x el of
             True -> True
             False -> anyCollided xs el
 

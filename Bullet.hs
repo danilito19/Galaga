@@ -1,49 +1,94 @@
-module Bullet 
+module Bullet
 (
    render,
    update,
-   addBullet
-) where 
+   addShipBullet, 
+   fireEnemyBullets
+) where
 
 import Graphics.Gloss
 import GameConstants
 import Collision
 import Sprite
+import System.Random (randomRIO)
 
-bulletBoxBound :: Float
-bulletBoxBound = 5
 
-shipBulletPic :: IO Picture  
-shipBulletPic = loadBMP "images/models/ship_bullet.bmp"
+bulletDefaultSize :: Size
+bulletDefaultSize = (30,30)
 
-mkBullet :: Sprite 
-mkBullet = Bullet (0, 0) (200,200) 0 Alive
+-- bullet images depending on owner
+shipOrFighterPic :: Sprite -> IO Picture
+shipOrFighterPic bullet@( Bullet {owner=Player}) = loadBMP "images/models/ship_bullet.bmp"
+shipOrFighterPic bullet@( Bullet {owner=Fighter}) = loadBMP "images/models/enemy_bullet.bmp"
 
-addBullet :: [Sprite] -> [Sprite]
-addBullet bullets = mkBullet:bullets
+-- make one bullet given size and owner
+mkBullet :: Point -> Owner -> Sprite
+mkBullet loc owner = Bullet loc bulletDefaultSize 0 Alive owner
 
-render :: [Sprite] -> IO Picture 
-render [] = return Blank
+-- add a ship bullet to a list of bullets
+addShipBullet :: [Sprite] -> Point -> [Sprite]
+addShipBullet bullets loc = (mkBullet loc Player):bullets
+
+-- add an enemy bullet to a list of bullets
+addFighterBullet :: [Sprite] -> Point -> [Sprite]
+addFighterBullet bullets loc = (mkBullet loc Fighter):bullets
+
+--render all bullets
+render :: [Sprite] -> IO [IO Picture]
 render bullets = do
-    pic <- shipBulletPic
-    let bullet = bullets !! 0
-    return $ scale 2 2 $ translate (fst (loc bullet)) (snd (loc bullet)) pic
+    return $ map (\b -> getBulletPic b) bullets
 
-update :: Float -> Point -> [Sprite] -> [Sprite]
-update _ _ [] = []
-update deltaTime shipLoc bullets =
+-- render one bullet
+getBulletPic :: Sprite -> IO Picture
+getBulletPic bullet = do
+    pic <- shipOrFighterPic bullet
+    return $ translate (fst (loc bullet)) (snd (loc bullet)) pic
 
-    let bullet = bullets !! 0
-        elTime = (elapsedTime bullet) + deltaTime  
-        distance = calcDistance deltaTime
-    in 
-    if elTime >= 0.5
-      then
-        [Bullet ((fst shipLoc), (snd shipLoc) + distance) (size bullet) 0 Alive]
-      else
-        [Bullet ((fst shipLoc), (snd shipLoc)) (size bullet) elTime Alive]
+-- remove any dead or Exploding bullets
+filterDeadBullets :: [Sprite] -> [Sprite]
+filterDeadBullets bullets =
+  filter (\e -> state e /= Dead && state e /= Exploding) bullets
 
-      -- return [] if a while passed or if loc > screen
-    -- where
-    --     distance = calcDistance deltaTime
+-- update all bullets
+update :: Float -> [Sprite] -> [Sprite]
+update _ [] = []
+update deltaTime bullets = 
+  filterDeadBullets $ map (\b -> updateBullet deltaTime b) bullets
+
+-- update a single bullet based on location and owner
+updateBullet :: Float -> Sprite -> Sprite
+updateBullet deltaTime bullet@(Bullet (x, y) size elapsedTime state owner) =
+  let
+    elTime = elapsedTime + deltaTime
+    distance = calcDistance deltaTime
+  in
+
+    if y < - 200
+       then Bullet (x, y) size 0 Dead owner
+       else
+          if elTime >= 0.2
+            then
+              case owner of 
+                Player -> Bullet (x, y + distance) size 0 Alive owner
+                Fighter -> Bullet (x, y - distance) size 0 Alive owner
+            else
+              Bullet (x, y) size elTime Alive owner
+
+-- pick a random enemy's location
+randomEnemyLoc :: [Sprite] -> IO Point
+randomEnemyLoc enemies = do
+  idx <- randomRIO (0, length enemies -1)
+  return $ loc (enemies !! idx)
+
+-- create an enemy bullet
+fireEnemyBullets :: [Sprite] -> [Sprite] -> IO [Sprite]
+fireEnemyBullets enemies bullets = 
+    if length enemyBullets < 2 
+      then do
+        loc <- randomEnemyLoc enemies
+        return $ addFighterBullet bullets ((fst loc - 10), (snd loc - 50))
+      else do
+        return bullets
+    where
+      enemyBullets = [b | b@Bullet{owner=Fighter} <- bullets]
 

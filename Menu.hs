@@ -10,6 +10,7 @@ import GameConstants
 galagaPic :: IO Picture  
 galagaPic = loadBMP "images/models/galaga.bmp"
 
+-- render the main menu
 render :: IO Picture 
 render = do 
     pic <- galagaPic
